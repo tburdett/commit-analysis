@@ -1,3 +1,4 @@
+import commit
 import os
 import unicodecsv
 import requests
@@ -11,33 +12,6 @@ owner_re = re.compile('\{owner\}')
 repo_re = re.compile('\{repo\}')
 
 
-class Commit:
-    def __init__(self, sha, date, short_explanation, committer_name, commit_message, html_url):
-        self.sha = sha
-        self.date = date
-        self.short_explanation = short_explanation
-        self.committer_name = committer_name
-        self.commit_message = commit_message
-        self.html_url = html_url
-
-    def __str__(self):
-        try:
-            return 'Commit:{sha=\'' + self.sha + '\',date=\'' + self.date + '\',short_explanation=\'' + self.short_explanation + \
-                   ',committer=\'' + self.committer_name + '\',commit_message=\'' + self.commit_message + \
-                   '\',link=\'' + self.html_url + '\''
-        except UnicodeDecodeError:
-            print "Something went wrong handling commit " + self.sha
-
-
-class ApiRequestError(Exception):
-    def __init__(self, status_code, content):
-        self.status_code = status_code
-        self.content = content
-
-    def __str(self):
-        return 'API request did not complete OK (' + self.status_code + ': ' + self.content + ').'
-
-
 def dispatch_api_request(url, user, token):
     s = requests.Session()
     s.auth = (user, token)
@@ -45,7 +19,7 @@ def dispatch_api_request(url, user, token):
     if response.status_code == 200:
         return json.loads(response.content)
     else:
-        raise ApiRequestError(response.status_code, response.content)
+        raise commit.ApiRequestError(response.status_code, response.content)
 
 
 def collect_commits_from_github(author, owner, repo, user, token):
@@ -75,13 +49,13 @@ def collect_commits_from_github(author, owner, repo, user, token):
         commit_metadata = c['commit']
         committer_metadata = commit_metadata['committer']
         master_commit_sha_list.append(sha)
-        commit = Commit(sha,
+        comm = commit.Commit(sha,
                         committer_metadata['date'],
                         short_explanation,
                         committer_metadata['name'],
                         commit_metadata['message'],
                         c['html_url'])
-        commits.append(commit)
+        commits.append(comm)
     return commits
 
 
@@ -105,7 +79,7 @@ def find_branches(repository_url, user, token):
 
 def write_results(results, author, owner, repo):
     dirname = 'output'
-    filename = "output/" + str(author) + "_" + str(owner) + ":" + str(repo) + "_commits.csv"
+    filename = "output/" + str(author) + "_" + str(owner) + ":" + str(repo) + "_git_commits.csv"
 
     if not os.path.exists(dirname):
         os.makedirs(dirname)
@@ -151,7 +125,8 @@ def main(argv):
     repo = ""
     has_repo = False
     user = "tburdett"
-    token = "8f98550124a38a2b0f99fd21bc27f0790d30c460"
+    token = ""
+    has_token = False
 
     try:
         opts, argv = getopt.getopt(argv, "ha:o:r:u:t:", ["help", "author=", "owner=", "repo=","username=","auth-token="])
@@ -175,9 +150,10 @@ def main(argv):
             user = str(arg)
         elif opt in ("-t", "--auth-token"):
             token = str(arg)
+            has_token = True
 
-    if not has_author or not has_owner or not has_repo:
-        print "username, owner and repo arguments are required"
+    if not has_author or not has_owner or not has_repo or not has_token:
+        print "username, owner, repo and auth-token arguments are required"
         usage()
         sys.exit(2)
     else:
@@ -186,7 +162,7 @@ def main(argv):
         try:
             commits = collect_commits_from_github(author, owner, repo, user, token)
             write_results(commits, author, owner, repo)
-        except ApiRequestError as e:
+        except commit.ApiRequestError as e:
             print "Failed to complete API requests - " + str(e.status_code) + ": " + str(e.content)
         sys.stdout.write("done!\n")
         sys.stdout.flush()
