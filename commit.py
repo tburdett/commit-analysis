@@ -23,6 +23,3 @@ class ApiRequestError(Exception):
 
     def __str(self):
         return 'API request did not complete OK (' + self.status_code + ': ' + self.content + ').'
-
-
-d
