@@ -13,7 +13,7 @@ class Commit:
                    ',committer=\'' + self.committer_name + '\',commit_message=\'' + self.commit_message + \
                    '\',link=\'' + self.html_url + '\''
         except UnicodeDecodeError:
-            print "Something went wrong handling commit " + self.sha
+            print "Something went wrong handling commit " + self.id
 
 
 class ApiRequestError(Exception):
