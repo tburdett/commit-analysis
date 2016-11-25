@@ -22,7 +22,10 @@ def dispatch_api_request(url, user, token):
         raise commit.ApiRequestError(response.status_code, response.content)
 
 
-def collect_commits_from_github(author, owner, repo, user, token):
+def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name=""):
+    if not fe_repo_name:
+        fe_repo_name = repo
+
     template_repository_url = find_repository(user, token)
 
     # repository url contains pointers for {owner} and {repo} - replace these
@@ -48,13 +51,16 @@ def collect_commits_from_github(author, owner, repo, user, token):
 
         commit_metadata = c['commit']
         committer_metadata = commit_metadata['committer']
+
+        evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + fe_repo_name + '?cs=' + sha
+
         master_commit_sha_list.append(sha)
         comm = commit.Commit(sha,
                         committer_metadata['date'],
                         short_explanation,
                         committer_metadata['name'],
                         commit_metadata['message'],
-                        c['html_url'])
+                        evidence_url)
         commits.append(comm)
     return commits
 
@@ -127,6 +133,8 @@ def main(argv):
     user = "tburdett"
     token = ""
     has_token = False
+    fe_repo_name = ""
+    has_fe_repo = False
 
     try:
         opts, argv = getopt.getopt(argv, "ha:o:r:u:t:", ["help", "author=", "owner=", "repo=","username=","auth-token="])
@@ -151,6 +159,9 @@ def main(argv):
         elif opt in ("-t", "--auth-token"):
             token = str(arg)
             has_token = True
+        elif opt in ("-n", "--fisheye-repo-name"):
+            fe_repo_name = str(arg)
+            has_fe_repo = True
 
     if not has_author or not has_owner or not has_repo or not has_token:
         print "username, owner, repo and auth-token arguments are required"
@@ -160,7 +171,10 @@ def main(argv):
         sys.stdout.write("Collecting commits...")
         sys.stdout.flush()
         try:
-            commits = collect_commits_from_github(author, owner, repo, user, token)
+            if has_fe_repo:
+                commits = collect_commits_from_github(author, owner, repo, user, token, fe_repo_name)
+            else:
+                commits = collect_commits_from_github(author, owner, repo, user, token)
             write_results(commits, author, owner, repo)
         except commit.ApiRequestError as e:
             print "Failed to complete API requests - " + str(e.status_code) + ": " + str(e.content)

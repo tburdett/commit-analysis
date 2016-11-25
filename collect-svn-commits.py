@@ -11,7 +11,10 @@ import commit
 finalpath_re = re.compile('([^/]+$)')
 
 
-def collect_commits_from_svn(author, repo, date_from="", date_to=""):
+def collect_commits_from_svn(author, repo, fe_repo_name, date_from="", date_to=""):
+    if not fe_repo_name:
+        fe_repo_name = repo
+
     slc = svn.local.LocalClient(repo)
 
     if date_from and date_to:
@@ -29,14 +32,14 @@ def collect_commits_from_svn(author, repo, date_from="", date_to=""):
             short_explanation = "1 commit"
             committer = le.author
             commit_message = le.msg
-            html_url = "http://bar.ebi.ac.uk:8080/trac/changeset/" + str(revision)
+            evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + fe_repo_name + '?cs=' + revision
 
             comm = commit.Commit(revision,
                                  date,
                                  short_explanation,
                                  committer,
                                  commit_message,
-                                 html_url)
+                                 evidence_url)
             commits.append(comm)
     return commits
 
@@ -88,9 +91,11 @@ def main(argv):
     repo = ""
     has_repo = False
     has_date = False
+    fe_repo_name = ""
+    has_fe_repo = False
 
     try:
-        opts, argv = getopt.getopt(argv, "ha:r:f:t:", ["help", "author=", "repo=", "date-from", "date-to"])
+        opts, argv = getopt.getopt(argv, "ha:r:f:t:n:", ["help", "author=", "repo=", "date-from", "date-to", "fisheye-repo-name"])
     except getopt.GetoptError:
         sys.exit(1)
 
@@ -110,9 +115,12 @@ def main(argv):
         elif opt in ("-t", "--date-to"):
             date_to = str(arg)
             has_date = True
+        elif opt in ("-n", "--fisheye-repo-name"):
+            fe_repo_name = str(arg)
+            has_fe_repo = True
 
-    if not has_author or not has_repo:
-        print "username and repo arguments are required"
+    if not has_author or not has_repo or not has_fe_repo:
+        print "username, repo and fisheye repository name arguments are required"
         usage()
         sys.exit(2)
     else:
@@ -120,11 +128,11 @@ def main(argv):
             if has_date:
                 sys.stdout.write("Collecting commits from " + date_from + " to " + date_to + "...")
                 sys.stdout.flush()
-                commits = collect_commits_from_svn(author, repo, date_from, date_to)
+                commits = collect_commits_from_svn(author, repo, fe_repo_name, date_from, date_to)
             else:
                 sys.stdout.write("Collecting commits...")
                 sys.stdout.flush()
-                commits = collect_commits_from_svn(author, repo)
+                commits = collect_commits_from_svn(author, repo, fe_repo_name)
             write_results(commits, author, repo)
         except commit.ApiRequestError as e:
             print "Failed to complete API requests - " + str(e.status_code) + ": " + str(e.content)
