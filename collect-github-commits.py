@@ -137,7 +137,7 @@ def main(argv):
     has_fe_repo = False
 
     try:
-        opts, argv = getopt.getopt(argv, "ha:o:r:u:t:", ["help", "author=", "owner=", "repo=","username=","auth-token="])
+        opts, argv = getopt.getopt(argv, "ha:o:r:u:t:n:", ["help", "author=", "owner=", "repo=","username=","auth-token=","fisheye-repo-name="])
     except getopt.GetoptError:
         sys.exit(1)
 
