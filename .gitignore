@@ -1,1 +1,4 @@
 output/
+
+# python compiled bytecode
+*.pyc
