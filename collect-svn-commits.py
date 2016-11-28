@@ -6,6 +6,7 @@ import os
 import unicodecsv
 import getopt
 import commit
+import collections
 
 
 finalpath_re = re.compile('([^/]+$)')
@@ -28,16 +29,22 @@ def collect_commits_from_svn(author, repo, fe_repo_name, date_from="", date_to="
     for le in log_entries:
         if le.author == author:
             revision = le.revision
-            date = le.date.strftime('%d/%m/%Y')
-            short_explanation = "1 commit"
             committer = le.author
             commit_message = le.msg
+            diff_count = len(slc.diff_summary(revision-1, revision))
+
+            date = le.date.strftime('%d/%m/%Y')
+            short_explanation = "1 commit"
             evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + str(fe_repo_name) + '?cs=' + str(revision)
 
             comm = commit.Commit(revision,
                                  date,
-                                 short_explanation,
                                  committer,
+                                 commit_message,
+                                 diff_count,
+                                 0,
+                                 0,
+                                 short_explanation,
                                  commit_message,
                                  evidence_url)
             commits.append(comm)
@@ -49,17 +56,51 @@ def write_results(results, author, repo):
     reponame = finalpath_re.search(repo).group(0)
 
     dirname = 'output'
-    filename = "output/" + str(author) + "_" + str(reponame) + "_svn_commits.csv"
+    evidence_filename = "output/" + str(author) + "_" + str(reponame) + "_evidence_of_work.txt"
+    calendar_filename = "output/" + str(author) + "_" + str(reponame) + "_svn_commits.csv"
 
     if not os.path.exists(dirname):
         os.makedirs(dirname)
 
-    if not os.path.exists(filename):
-        with open(filename, 'w') as f:
-            writer = unicodecsv.writer(f, delimiter=',')
-            writer.writerow(["Start Date", "End Date", "Work package", "Evidence", "Short Description", "Person", "Long description", "File", "Evidence URL"])
+    # write evidence file, plain text with calendar-style format
+    with open(evidence_filename, 'w') as f:
+        # write header
+        f.write("CODE COMMIT REPORT\n\n")
+        f.write("=========================\n")
+        f.write("Author:\t\t" + author + "\n")
+        f.write("Username:\t" + author + "\n")
+        f.write("Repository:\t{0}\n".format(str(repo)))
+        f.write("Dates:\t\t<DATEFROM> to <DATETO>\n")
+        f.write("=========================\n\n")
 
-    with open(filename, 'a') as f:
+        # index results by date
+        indexed_results = collections.OrderedDict()
+        for result in results:
+            if result.date in indexed_results:
+                indexed_results[result.date].append(result)
+            else:
+                indexed_results[result.date] = [result]
+
+        for date in reversed(indexed_results.keys()):
+            f.write(str(date) + "\n")
+            f.write("----------\n")
+            num_commits = len(indexed_results[date])
+            if num_commits == 1:
+                f.write("1 commit\n")
+            else:
+                f.write("{0} commits\n".format(str(num_commits)))
+            for next_result in indexed_results[date]:
+                f.write("\t * Changed {0} files\n".format(
+                    str(next_result.changed_file_count)))
+                f.write("\t\t\"{0}\"\n".format(str(next_result.commit_message)))
+            f.write("\n\n")
+        f.close()
+
+    with open(calendar_filename, 'w') as f:
+        writer = unicodecsv.writer(f, delimiter=',')
+        writer.writerow(["Start Date", "End Date", "Work package", "Evidence", "Short Description", "Person", "Long description", "File", "Evidence URL"])
+
+    with open(calendar_filename, 'a') as f:
         writer = unicodecsv.writer(f, delimiter=',')
         # print "Writing " + str(len(results)) + " annotations to " + filename
         for result in results:
@@ -70,8 +111,9 @@ def write_results(results, author, repo):
                              result.short_explanation,
                              result.committer_name,
                              result.commit_message,
-                             "",
-                             result.html_url])
+                             evidence_filename,
+                             result.link_url])
+    f.close()
 
 
 def usage():

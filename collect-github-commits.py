@@ -124,7 +124,7 @@ def write_results(results, author, owner, repo):
             f.write(str(date) + "\n")
             f.write("----------\n")
             num_commits = len(indexed_results[date])
-            if num_commits > 1:
+            if num_commits == 1:
                 f.write("1 commit\n")
             else:
                 f.write("{0} commits\n".format(str(num_commits)))
