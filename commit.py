@@ -1,17 +1,21 @@
 class Commit:
-    def __init__(self, id, date, short_explanation, committer_name, commit_message, html_url):
+    def __init__(self, id, date, committer_name, commit_message, changed_file_count, addition_count, deletion_count, short_explanation, long_explanation, link_url):
         self.id = id
         self.date = date
-        self.short_explanation = short_explanation
         self.committer_name = committer_name
+        self.changed_file_count = changed_file_count
+        self.addition_count = addition_count
+        self.deletion_count = deletion_count
+        self.short_explanation = short_explanation
+        self.long_explanation = long_explanation
         self.commit_message = commit_message
-        self.html_url = html_url
+        self.link_url = link_url
 
     def __str__(self):
         try:
             return 'Commit:{id=\'' + self.id + '\',date=\'' + self.date + '\',short_explanation=\'' + self.short_explanation + \
                    ',committer=\'' + self.committer_name + '\',commit_message=\'' + self.commit_message + \
-                   '\',link=\'' + self.html_url + '\''
+                   '\',link=\'' + self.link_url + '\''
         except UnicodeDecodeError:
             print "Something went wrong handling commit " + self.id
 

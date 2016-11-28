@@ -6,6 +6,8 @@ import json
 import re
 import getopt
 import sys
+import datetime
+import collections
 
 api_url = "https://api.github.com/"
 owner_re = re.compile('\{owner\}')
@@ -49,6 +51,10 @@ def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name="
         commit_metadata = c['commit']
         committer_metadata = commit_metadata['committer']
 
+        commit_date = datetime.datetime.strptime(committer_metadata['date'], "%Y-%m-%dT%H:%M:%SZ")
+        date_str = commit_date.strftime("%d/%m/%Y")
+        committer_name = committer_metadata['name']
+        commit_message = commit_metadata['message']
         short_description = "1 commit"
         long_description = '{0} modified files, {1} total changes ({2} additions and {3} deletions): {4}'\
             .format(str(files), str(total), str(additions), str(deletions), str(commit_metadata['message']))
@@ -56,11 +62,15 @@ def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name="
 
         master_commit_sha_list.append(sha)
         comm = commit.Commit(sha,
-                        committer_metadata['date'],
-                        short_description,
-                        committer_metadata['name'],
-                        long_description,
-                        evidence_url)
+                             date_str,
+                             committer_name,
+                             commit_message,
+                             files,
+                             additions,
+                             deletions,
+                             short_description,
+                             long_description,
+                             evidence_url)
         commits.append(comm)
     return commits
 
@@ -85,17 +95,51 @@ def find_branches(repository_url, user, token):
 
 def write_results(results, author, owner, repo):
     dirname = 'output'
-    filename = "output/" + str(author) + "_" + str(owner) + ":" + str(repo) + "_git_commits.csv"
+    evidence_filename = "output/" + str(author) + "_" + str(owner) + ":" + str(repo) + "_evidence_of_work.txt"
+    calendar_filename = "output/" + str(author) + "_" + str(owner) + ":" + str(repo) + "_git_commits.csv"
 
     if not os.path.exists(dirname):
         os.makedirs(dirname)
 
-    if not os.path.exists(filename):
-        with open(filename, 'w') as f:
-            writer = unicodecsv.writer(f, delimiter=',')
-            writer.writerow(["Start Date", "End Date", "Work package", "Evidence", "Short Description", "Person", "Long description", "File", "Evidence URL"])
+    # write evidence file, plain text with calendar-style format
+    with open(evidence_filename, 'w') as f:
+        # write header
+        f.write("CODE COMMIT REPORT\n\n")
+        f.write("=========================\n")
+        f.write("Author:\t\t" + author + "\n")
+        f.write("Username:\t" + author + "\n")
+        f.write("Repository:\thttp://github.com/{0}/{1}\n".format(str(owner), str(repo)))
+        f.write("Dates:\t\t<DATEFROM> to <DATETO>\n")
+        f.write("=========================\n\n")
 
-    with open(filename, 'a') as f:
+        # index results by date
+        indexed_results = collections.OrderedDict()
+        for result in results:
+            if result.date in indexed_results:
+                indexed_results[result.date].append(result)
+            else:
+                indexed_results[result.date] = [result]
+
+        for date in reversed(indexed_results.keys()):
+            f.write(str(date) + "\n")
+            f.write("----------\n")
+            num_commits = len(indexed_results[date])
+            if num_commits > 1:
+                f.write("1 commit\n")
+            else:
+                f.write("{0} commits\n".format(str(num_commits)))
+            for next_result in indexed_results[date]:
+                f.write("\t * Changed {0} files ({1} additions and {2} deletions)\n".format(
+                    str(next_result.changed_file_count), str(next_result.addition_count), str(next_result.deletion_count)))
+                f.write("\t\t\"{0}\"\n".format(str(next_result.commit_message)))
+            f.write("\n\n")
+        f.close()
+
+    with open(calendar_filename, 'w') as f:
+        writer = unicodecsv.writer(f, delimiter=',')
+        writer.writerow(["Start Date", "End Date", "Work package", "Evidence", "Short Description", "Person", "Long description", "File", "Evidence URL"])
+
+    with open(calendar_filename, 'a') as f:
         writer = unicodecsv.writer(f, delimiter=',')
         # print "Writing " + str(len(results)) + " annotations to " + filename
         for result in results:
@@ -106,8 +150,9 @@ def write_results(results, author, owner, repo):
                              result.short_explanation,
                              result.committer_name,
                              result.commit_message,
-                             "",
-                             result.html_url])
+                             evidence_filename,
+                             result.link_url])
+    f.close()
 
 
 def usage():
