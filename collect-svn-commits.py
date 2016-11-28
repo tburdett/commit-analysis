@@ -32,7 +32,7 @@ def collect_commits_from_svn(author, repo, fe_repo_name, date_from="", date_to="
             short_explanation = "1 commit"
             committer = le.author
             commit_message = le.msg
-            evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + fe_repo_name + '?cs=' + revision
+            evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + str(fe_repo_name) + '?cs=' + str(revision)
 
             comm = commit.Commit(revision,
                                  date,

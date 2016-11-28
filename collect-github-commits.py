@@ -46,20 +46,20 @@ def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name="
         files = len(commit_response['files'])
         additions = commit_response['stats']['additions']
         deletions = commit_response['stats']['deletions']
-        short_explanation = '{0} modified files, {1} total changes ({2} additions and {3} deletions)'\
-            .format(str(files), str(total), str(additions), str(deletions))
-
         commit_metadata = c['commit']
         committer_metadata = commit_metadata['committer']
 
-        evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + fe_repo_name + '?cs=' + sha
+        short_description = "1 commit"
+        long_description = '{0} modified files, {1} total changes ({2} additions and {3} deletions): {4}'\
+            .format(str(files), str(total), str(additions), str(deletions), str(commit_metadata['message']))
+        evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + str(fe_repo_name) + '?cs=' + str(sha)
 
         master_commit_sha_list.append(sha)
         comm = commit.Commit(sha,
                         committer_metadata['date'],
-                        short_explanation,
+                        short_description,
                         committer_metadata['name'],
-                        commit_metadata['message'],
+                        long_description,
                         evidence_url)
         commits.append(comm)
     return commits
