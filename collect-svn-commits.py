@@ -1,4 +1,5 @@
 import svn.local
+import svn.common
 import datetime
 import sys
 import re
@@ -31,7 +32,10 @@ def collect_commits_from_svn(author, repo, fe_repo_name, date_from="", date_to="
             revision = le.revision
             committer = le.author
             commit_message = le.msg
-            diff_count = len(slc.diff_summary(revision-1, revision))
+            try:
+                diff_count = len(slc.diff_summary(revision-1, revision))
+            except svn.common.SvnException:
+                diff_count = "[unknown]"
 
             date = le.date.strftime('%d/%m/%Y')
             short_explanation = "1 commit"
