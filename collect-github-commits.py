@@ -12,6 +12,8 @@ import collections
 api_url = "https://api.github.com/"
 owner_re = re.compile('\{owner\}')
 repo_re = re.compile('\{repo\}')
+link_url_re = re.compile('<([^>]+)>')
+rel_re = re.compile('; rel=\"([^\"]+)\"$')
 
 
 def dispatch_api_request(url, user, token):
@@ -24,9 +26,37 @@ def dispatch_api_request(url, user, token):
         raise commit.ApiRequestError(response.status_code, response.content)
 
 
-def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name=""):
+def dispatch_paged_api_request(url, user, token):
+    s = requests.Session()
+    s.auth = (user, token)
+    response = s.get(url)
+    next_page_url = ""
+    if 'Link' in response.headers:
+        link_text = response.headers['Link']
+        links = link_text.split(",")
+        has_next = False
+        for link in links:
+            url = link_url_re.search(link).group(1)
+            rel_type = rel_re.search(link).group(1)
+            if rel_type == 'next':
+                next_page_url = url
+                has_next = True
+        if not has_next:
+            next_page_url = None
+
+    if response.status_code == 200:
+        return json.loads(response.content), next_page_url
+    else:
+        raise commit.ApiRequestError(response.status_code, response.content)
+
+
+def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name, date_from="", date_to=""):
     if not fe_repo_name:
         fe_repo_name = repo
+
+    if date_from and date_to:
+        df = datetime.datetime.strptime(date_from, "%d/%m/%Y").strftime("%Y-%m-%dT%H:%M:%SZ")
+        dt = datetime.datetime.strptime(date_to, "%d/%m/%Y").strftime("%Y-%m-%dT%H:%M:%SZ")
 
     template_repository_url = find_repository(user, token)
 
@@ -36,42 +66,52 @@ def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name="
 
     # now collect all commits to master
     commits_url = repository_url + '/commits?author=' + author
-    cs = dispatch_api_request(commits_url, user, token)
+    if date_from and date_to:
+        commits_url += "&since={0}&until={1}".format(str(df), str(dt))
+
+    cs, next_page_url = dispatch_paged_api_request(commits_url, user, token)
 
     commits = []
     master_commit_sha_list = []
-    for c in cs:
-        sha = c['sha']
-        commit_url = c['url']
-        commit_response = dispatch_api_request(commit_url, user, token)
-        total = commit_response['stats']['total']
-        files = len(commit_response['files'])
-        additions = commit_response['stats']['additions']
-        deletions = commit_response['stats']['deletions']
-        commit_metadata = c['commit']
-        committer_metadata = commit_metadata['committer']
+    while True:
+        for c in cs:
+            sha = c['sha']
+            commit_url = c['url']
+            commit_response = dispatch_api_request(commit_url, user, token)
+            total = commit_response['stats']['total']
+            files = len(commit_response['files'])
+            additions = commit_response['stats']['additions']
+            deletions = commit_response['stats']['deletions']
+            commit_metadata = c['commit']
+            committer_metadata = commit_metadata['committer']
 
-        commit_date = datetime.datetime.strptime(committer_metadata['date'], "%Y-%m-%dT%H:%M:%SZ")
-        date_str = commit_date.strftime("%d/%m/%Y")
-        committer_name = committer_metadata['name']
-        commit_message = commit_metadata['message']
-        short_description = "1 commit"
-        long_description = '{0} modified files, {1} total changes ({2} additions and {3} deletions): {4}'\
-            .format(str(files), str(total), str(additions), str(deletions), str(commit_metadata['message']))
-        evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + str(fe_repo_name) + '?cs=' + str(sha)
+            commit_date = datetime.datetime.strptime(committer_metadata['date'], "%Y-%m-%dT%H:%M:%SZ")
+            date_str = commit_date.strftime("%d/%m/%Y")
+            committer_name = committer_metadata['name']
+            commit_message = commit_metadata['message']
+            short_description = "1 commit"
+            long_description = '{0} modified files, {1} total changes ({2} additions and {3} deletions): {4}'\
+                .format(str(files), str(total), str(additions), str(deletions), str(commit_metadata['message']))
+            evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + str(fe_repo_name) + '?cs=' + str(sha)
 
-        master_commit_sha_list.append(sha)
-        comm = commit.Commit(sha,
-                             date_str,
-                             committer_name,
-                             commit_message,
-                             files,
-                             additions,
-                             deletions,
-                             short_description,
-                             long_description,
-                             evidence_url)
-        commits.append(comm)
+            master_commit_sha_list.append(sha)
+            comm = commit.Commit(sha,
+                                 date_str,
+                                 committer_name,
+                                 commit_message,
+                                 files,
+                                 additions,
+                                 deletions,
+                                 short_description,
+                                 long_description,
+                                 evidence_url)
+            commits.append(comm)
+        if next_page_url:
+            print "Sending API request to {0}".format(next_page_url)
+            cs, next_page_url = dispatch_paged_api_request(next_page_url, user, token)
+        else:
+            break
+
     return commits
 
 
@@ -175,14 +215,14 @@ def main(argv):
     has_owner = False
     repo = ""
     has_repo = False
+    has_date = False
     user = "tburdett"
     token = ""
     has_token = False
     fe_repo_name = ""
-    has_fe_repo = False
 
     try:
-        opts, argv = getopt.getopt(argv, "ha:o:r:u:t:n:", ["help", "author=", "owner=", "repo=","username=","auth-token=","fisheye-repo-name="])
+        opts, argv = getopt.getopt(argv, "ha:o:r:f:t:b:u:s:n:", ["help", "author=", "owner=", "repo=","branch=","username=","security-token=","fisheye-repo-name="])
     except getopt.GetoptError:
         sys.exit(1)
 
@@ -199,27 +239,34 @@ def main(argv):
         elif opt in ("-r", "--repo"):
             repo = str(arg)
             has_repo = True
+        elif opt in ("-f", "--date-from"):
+            date_from = str(arg)
+            has_date = True
+        elif opt in ("-t", "--date-to"):
+            date_to = str(arg)
+            has_date = True
         elif opt in ("-u", "--username"):
             user = str(arg)
-        elif opt in ("-t", "--auth-token"):
+        elif opt in ("-s", "--security-token"):
             token = str(arg)
             has_token = True
         elif opt in ("-n", "--fisheye-repo-name"):
             fe_repo_name = str(arg)
-            has_fe_repo = True
 
     if not has_author or not has_owner or not has_repo or not has_token:
         print "username, owner, repo and auth-token arguments are required"
         usage()
         sys.exit(2)
     else:
-        sys.stdout.write("Collecting commits...")
-        sys.stdout.flush()
         try:
-            if has_fe_repo:
-                commits = collect_commits_from_github(author, owner, repo, user, token, fe_repo_name)
+            if has_date:
+                sys.stdout.write("Collecting commits from " + date_from + " to " + date_to + "...")
+                sys.stdout.flush()
+                commits = collect_commits_from_github(author, owner, repo, user, token, fe_repo_name, date_from, date_to)
             else:
-                commits = collect_commits_from_github(author, owner, repo, user, token)
+                sys.stdout.write("Collecting commits...")
+                sys.stdout.flush()
+                commits = collect_commits_from_github(author, owner, repo, user, token, fe_repo_name)
             write_results(commits, author, owner, repo)
         except commit.ApiRequestError as e:
             print "Failed to complete API requests - " + str(e.status_code) + ": " + str(e.content)
