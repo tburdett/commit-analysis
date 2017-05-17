@@ -92,7 +92,7 @@ def collect_commits_from_github(author, owner, repo, user, token, fe_repo_name, 
             short_description = "1 commit"
             long_description = '{0} modified files, {1} total changes ({2} additions and {3} deletions): {4}'\
                 .format(str(files), str(total), str(additions), str(deletions), str(commit_metadata['message']))
-            evidence_url = 'http://gromit.ebi.ac.uk:10002/changelog/' + str(fe_repo_name) + '?cs=' + str(sha)
+            evidence_url = 'https://github.com/{0}/{1}/commit/{2}'.format(str(owner), str(repo), str(sha))
 
             master_commit_sha_list.append(sha)
             comm = commit.Commit(sha,
